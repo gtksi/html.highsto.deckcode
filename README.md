@@ -5,6 +5,7 @@ Hi!story のデッキコードからデッキリストを取得し、カード�
 ## 現在の構成
 
 - HTML / CSS / JavaScript のみ
+- カードマスタ `data/cards.json` を同梱
 - カードの正規化キーは `カード名｜異名`
 - 収録セット違いは `cardId / productId / packId / cardNumber` 等で保持
 - GitHub Actions で `main` への push 時に GitHub Pages へ自動デプロイ
@@ -39,3 +40,28 @@ python -m http.server 8000
 ```
 
 その後 `http://localhost:8000/` を開きます。
+
+## Cloudflare Worker
+
+The `worker/` directory provides the server-side bridge: GitHub Pages -> Cloudflare Worker -> highsto.net.
+
+### GitHub Actions secrets
+
+Add these repository secrets under **Settings -> Secrets and variables -> Actions**:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+The Worker workflow deploys when `worker/` changes or when manually dispatched.
+
+### First setup
+
+1. Create a Cloudflare API token with permission to deploy Workers.
+2. Add the two GitHub Actions secrets above.
+3. Push to `main` and wait for `Deploy Worker` to finish.
+4. Note the Worker URL shown by Cloudflare (normally `https://highsto-deck-api.<subdomain>.workers.dev`).
+5. Replace `YOUR_SUBDOMAIN` in `index.html` with the actual Worker subdomain.
+6. Push again.
+
+The Worker exposes `GET /api/health` and `GET /api/deck/<deck-code>`. Its browser CORS origin is currently restricted to `https://gtksi.github.io`; change `ALLOWED_ORIGIN` in `worker/src/index.js` if the Pages URL changes.
+

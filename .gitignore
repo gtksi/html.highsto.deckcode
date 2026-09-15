@@ -8,3 +8,4 @@ Thumbs.db
 
 # Local dev
 *.log
+worker/node_modules/
