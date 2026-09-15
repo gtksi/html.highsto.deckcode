@@ -2,7 +2,8 @@ name: Deploy Worker
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - "worker/**"
       - ".github/workflows/deploy-worker.yml"
@@ -11,12 +12,29 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: worker
+          node-version: 24
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install dependencies
+        working-directory: worker
+        run: npm install
+
+      - name: Check Wrangler version
+        working-directory: worker
+        run: npx wrangler --version
+
+      - name: Deploy Worker
+        working-directory: worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
