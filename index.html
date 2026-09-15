@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hi!story Deck Analyzer</title>
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div>
+    <h1>Hi!story Deck Analyzer</h1>
+    <p>デッキコードからデッキリストを取得・正規化し、CSV / Markdown / JSONへ出力</p>
+  </div>
+</header>
+
+<main class="container">
+  <section class="card">
+    <h2>1. デッキコード</h2>
+    <p class="hint">1行1コード。例：<code>vSh1tf9q</code></p>
+    <textarea id="deckCodes" rows="6" placeholder="vSh1tf9q&#10;sZJYnvWl&#10;zuujnTRa"></textarea>
+    <div class="actions">
+      <button id="loadCodes" class="primary">デッキを取得</button>
+      <button id="clearAll">クリア</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. 大会結果ページ</h2>
+    <p class="hint">現在は試験的なURL入力欄です。CORS等により取得できない場合はデッキコード方式を利用してください。</p>
+    <div class="row">
+      <input id="tournamentUrl" type="url" placeholder="https://highsto.net/news/..." />
+      <button id="loadTournament">大会ページを解析</button>
+    </div>
+    <pre id="tournamentStatus" class="status"></pre>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <div>
+        <h2>取得結果</h2>
+        <span id="summary" class="muted">0デッキ / 0枚</span>
+      </div>
+      <div class="actions">
+        <button id="exportCsv">CSV</button>
+        <button id="exportMd">Markdown</button>
+        <button id="exportJson">JSON</button>
+      </div>
+    </div>
+    <div id="results"></div>
+  </section>
+
+  <section class="card">
+    <h2>カードマスタ</h2>
+    <p id="cardMasterStatus">読み込み中…</p>
+  </section>
+</main>
+
+<footer>
+  <p>Hi!story Deck Analyzer — GitHub Pages向け静的サイト</p>
+</footer>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
