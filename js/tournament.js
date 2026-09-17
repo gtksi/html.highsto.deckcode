@@ -31,11 +31,50 @@ export async function fetchTournamentPage(input) {
   return await response.text();
 }
 
+function normalizeLine(text) {
+  return String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[\t\r ]+/g, " ")
+    .trim();
+}
+
+function isDeckCode(value) {
+  // Hi!story deck-code pages use an 8-character alphanumeric code.
+  // Keep this strict so Amazon/X/footer text can never become a code.
+  return /^[A-Za-z0-9]{8}$/.test(value);
+}
+
 export function parseTournamentHtml(html) {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const text = doc.body?.innerText ?? "";
-  const codes = [...new Set((text.match(/\b[A-Za-z0-9]{6,16}\b/g) ?? [])
-    .filter(x => /^[A-Za-z0-9]{6,16}$/.test(x)))];
+  const lines = [...(doc.body?.innerText || "").split(/\n+/)]
+    .map(normalizeLine)
+    .filter(Boolean);
+
+  const codes = [];
+  const seen = new Set();
+
+  const add = code => {
+    if (!isDeckCode(code) || seen.has(code)) return;
+    seen.add(code);
+    codes.push(code);
+  };
+
+  // Primary parser: the official tournament pages explicitly label each code
+  // as "デッキコード：XXXXXXXX". This avoids picking up navigation/footer
+  // text such as Amazon, Twitter, Highsto, or Copyright.
+  for (const line of lines) {
+    const match = line.match(/デッキコード\s*[：:]\s*([A-Za-z0-9]{8})(?![A-Za-z0-9])/);
+    if (match) add(match[1]);
+  }
+
+  // Fallback for a markup variant where the label and code are separated into
+  // adjacent text nodes/lines. Only accept a line that consists of exactly
+  // one 8-character alphanumeric token.
+  if (!codes.length) {
+    for (const line of lines) {
+      if (isDeckCode(line)) add(line);
+    }
+  }
 
   return {
     title: doc.querySelector("h1")?.textContent?.trim() || "",

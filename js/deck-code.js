@@ -6,12 +6,20 @@ function getWorkerBaseUrl() {
 }
 
 export function parseCodes(text) {
-  return [...new Set(String(text || "").split(/[\s,，、]+/).map(s => s.trim()).filter(Boolean))];
+  // Manual input may contain commas/newlines. Keep only actual 8-character
+  // Hi!story deck codes so pasted page text cannot become a request.
+  const tokens = String(text || "")
+    .split(/[\s,，、]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  return [...new Set(tokens.filter(s => /^[A-Za-z0-9]{8}$/.test(s)))];
 }
 
 export async function fetchDeckPage(code) {
   const normalized = String(code).trim();
-  if (!normalized) throw new Error("デッキコードが空です。");
+  if (!/^[A-Za-z0-9]{8}$/.test(normalized)) {
+    throw new Error("デッキコードは8文字の英数字で指定してください。");
+  }
   const url = `${getWorkerBaseUrl()}/api/deck/${encodeURIComponent(normalized)}`;
   const response = await fetch(url, { method: "GET", headers: { Accept: "text/html" } });
   if (!response.ok) throw new Error(`デッキ取得に失敗しました (${response.status})`);
@@ -22,12 +30,6 @@ function normalizeText(text) {
   return String(text || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function getLines(element) {
-  return [...(element?.innerText || "").split(/\n+/)]
-    .map(normalizeText)
-    .filter(Boolean);
-}
-
 function getCount(text) {
   const value = normalizeText(text);
   const match = value.match(/(?:×|x|X)\s*(\d{1,2})(?:\s*枚)?(?:\s|$)/);
@@ -36,68 +38,80 @@ function getCount(text) {
   return Number.isInteger(count) && count >= 1 && count <= 4 ? count : null;
 }
 
-function isCardImage(img) {
+function hasCardLikeImage(img) {
   if (!img) return false;
   const src = img.getAttribute("src") || "";
   const alt = normalizeText(img.getAttribute("alt") || "");
-  return Boolean(alt) || /\.(webp|png|jpg|jpeg)(\?|$)/i.test(src) || /card\d+|CRF_|PRM_/i.test(src);
+  return Boolean(
+    /app\.highsto\.net\/assets\/images\/cards\//i.test(src) ||
+    /(?:^|\/)cards?\//i.test(src) ||
+    /(?:card\d+|CRF_|PRM_)/i.test(src) ||
+    alt.length > 0
+  );
 }
 
-function findCardContainer(anchor) {
-  // The Hi!story page has changed its wrapper structure before. Do not assume
-  // anchor.parentElement is the card row: on the first/last card it can span
-  // a much larger part of the deck page and accidentally include UI text.
-  // Instead, choose the smallest ancestor that contains exactly one card image
-  // and a valid x1..x4 count.
-  let node = anchor.parentElement;
-  for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
-    const images = [...node.querySelectorAll("img")].filter(isCardImage);
+function getLines(element) {
+  return [...(element?.innerText || "").split(/\n+/)]
+    .map(normalizeText)
+    .filter(Boolean);
+}
+
+function isUiText(line) {
+  return /^(Amazon|Twitter|X\s*\(旧Twitter\)|LINE|Highsto|Copyright|デッキ画像を生成|A4印刷用出力|PNG出力|PDF出力|コピー|QRコード|デッキ表示|デッキレシピ|合計枚数)$/i.test(line);
+}
+
+function cleanCardLines(lines) {
+  return lines.filter(line => {
+    if (isUiText(line)) return false;
+    if (/(?:×|x|X)\s*\d{1,2}(?:\s*枚)?(?:\s|$)/.test(line)) return false;
+    if (/^\d{1,2}\s*枚?$/.test(line)) return false;
+    return true;
+  });
+}
+
+function findCardContainer(img) {
+  // First choice: smallest ancestor containing this image, exactly one
+  // card-like image, and a valid x1-x4 count.
+  let node = img.parentElement;
+  for (let depth = 0; node && depth < 14; depth++, node = node.parentElement) {
+    const images = [...node.querySelectorAll("img")].filter(hasCardLikeImage);
     if (images.length !== 1) continue;
     const count = getCount(node.innerText || "");
-    if (count != null) return { node, count, image: images[0] };
+    if (count != null) return { node, count };
   }
   return null;
 }
 
-function extractCard(container, anchor) {
-  const img = container.image || anchor.querySelector("img");
-  const src = img?.getAttribute("src") || "";
-  const alt = normalizeText(img?.getAttribute("alt") || "");
-  const lines = getLines(container.node);
+function extractCard(img, container) {
+  const src = img.getAttribute("src") || "";
+  const alt = normalizeText(img.getAttribute("alt") || "");
+  const lines = cleanCardLines(getLines(container.node));
   const count = container.count;
 
-  const cleaned = lines.filter(line => {
-    if (/(?:×|x|X)\s*\d{1,2}(?:\s*枚)?(?:\s|$)/.test(line)) return false;
-    if (/^\d{1,2}\s*枚?$/.test(line)) return false;
-    if (["デッキ表示", "デッキレシピ", "合計枚数"].includes(line)) return false;
-    return true;
-  });
-
-  // The image alt is the card name. The text immediately associated with the
-  // image is normally the alias; cards without an alias have no remaining line.
+  // Prefer image alt because the site may expose the card name there.
   let name = alt;
   let alias = "";
 
   if (name) {
-    const remaining = cleaned.filter(line => line !== name);
-    alias = remaining.at(-1) || "";
+    const remaining = lines.filter(line => line !== name);
+    // Usually the alias is the text immediately associated with the card name.
+    // Avoid treating arbitrary surrounding text as an alias.
+    alias = remaining.find(line => line !== name && line.length <= 80) || "";
   } else {
-    name = cleaned.at(-1) || "";
-    alias = cleaned.length >= 2 ? cleaned.at(-2) : "";
+    // If alt is absent, choose the last non-UI line as the card name.
+    // A preceding short line is a possible alias.
+    name = lines.at(-1) || "";
+    alias = lines.length >= 2 ? lines.at(-2) : "";
   }
 
-  // Guard against page controls accidentally being treated as an alias/name.
-  if (/^(デッキ画像を生成|A4印刷用出力|PNG出力|PDF出力|コピー|QRコード)$/.test(name)) {
-    return null;
-  }
-  if (!name) return null;
+  if (!name || isUiText(name)) return null;
 
   return {
     name,
-    alias,
+    alias: alias === name || isUiText(alias) ? "" : alias,
     count,
     image: src,
-    text: normalizeText(container.node.innerText || anchor.innerText || "")
+    text: normalizeText(container.node.innerText || "")
   };
 }
 
@@ -106,41 +120,50 @@ export function parseDeckHtml(html, code = "") {
   const rows = [];
   const seen = new Set();
 
-  const candidates = [...doc.querySelectorAll("a")].filter(a => {
-    const href = a.getAttribute("href") || "";
-    const img = a.querySelector("img");
-    const src = img?.getAttribute("src") || "";
-    return isCardImage(img) || /card\d+|CRF_|PRM_/i.test(src) || /card/i.test(href);
-  });
+  // Work from images rather than anchors. Some valid deck pages do not wrap
+  // card images in an <a>, which made the previous parser return zero cards.
+  const images = [...doc.querySelectorAll("img")].filter(hasCardLikeImage);
 
-  for (const a of candidates) {
-    const container = findCardContainer(a);
+  for (const img of images) {
+    const container = findCardContainer(img);
     if (!container) continue;
 
-    const card = extractCard(container, a);
+    const card = extractCard(img, container);
     if (!card) continue;
 
-    // One anchor can sometimes be encountered more than once through nested
-    // markup. Use image URL + name + alias as the parser-level identity.
-    const key = `${card.image}|${card.name}|${card.alias}`;
+    const key = `${card.image}|${card.name}|${card.alias}|${card.count}`;
     if (seen.has(key)) continue;
     seen.add(key);
     rows.push(card);
   }
 
-  // Fallback for a future markup variant without image links. Keep it strict:
-  // only accept lines that look like an actual card count and never parse the
-  // page header/footer as a card name.
+  // Fallback: locate elements containing a count and then inspect their
+  // nearest card-like image. This handles markup where the count is rendered
+  // outside the immediate image wrapper.
   if (!rows.length) {
-    const lines = [...(doc.body?.innerText || "").split(/\n+/)].map(normalizeText).filter(Boolean);
-    for (let i = 0; i < lines.length; i++) {
-      const count = getCount(lines[i]);
-      if (count == null) continue;
-      const name = normalizeText(lines[i].replace(/(?:×|x|X)\s*\d{1,2}(?:\s*枚)?/, ""));
-      if (!name || /^(合計枚数|デッキレシピ|デッキ表示)$/.test(name)) continue;
-      rows.push({ name, alias: "", count, image: "", text: lines[i] });
+    const countElements = [...doc.querySelectorAll("body *")].filter(el => {
+      const text = normalizeText(el.innerText || "");
+      return text && getCount(text) != null && text.length <= 300;
+    });
+
+    for (const el of countElements) {
+      const img = [...el.querySelectorAll("img")].find(hasCardLikeImage) ||
+        (hasCardLikeImage(el.querySelector("img")) ? el.querySelector("img") : null);
+      if (!img) continue;
+
+      const container = { node: el, count: getCount(el.innerText || "") };
+      const card = extractCard(img, container);
+      if (!card) continue;
+      const key = `${card.image}|${card.name}|${card.alias}|${card.count}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(card);
     }
   }
 
-  return { code, total: rows.reduce((sum, row) => sum + row.count, 0), cards: rows };
+  return {
+    code,
+    total: rows.reduce((sum, row) => sum + row.count, 0),
+    cards: rows
+  };
 }
