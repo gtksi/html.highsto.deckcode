@@ -1,6 +1,33 @@
-export async function fetchTournamentPage(url) {
-  const response = await fetch(url, { credentials: "omit" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+const DEFAULT_WORKER_BASE_URL = "https://highsto-deck-api.YOUR_SUBDOMAIN.workers.dev";
+
+function getWorkerBaseUrl() {
+  const configured = window.HIGHSTO_WORKER_BASE_URL;
+  return (configured || DEFAULT_WORKER_BASE_URL).replace(/\/+$/, "");
+}
+
+function getTournamentId(input) {
+  let parsed;
+  try {
+    parsed = new URL(String(input).trim());
+  } catch {
+    throw new Error("大会結果URLの形式が正しくありません。");
+  }
+
+  if (parsed.hostname !== "highsto.net" || !/^\/news\/\d+\/?$/.test(parsed.pathname)) {
+    throw new Error("対応しているURLは https://highsto.net/news/<数字>/ です。");
+  }
+
+  return parsed.pathname.match(/^\/news\/(\d+)/)[1];
+}
+
+export async function fetchTournamentPage(input) {
+  const tournamentId = getTournamentId(input);
+  const url = `${getWorkerBaseUrl()}/api/tournament/${tournamentId}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "text/html" }
+  });
+  if (!response.ok) throw new Error(`大会結果取得に失敗しました (${response.status})`);
   return await response.text();
 }
 

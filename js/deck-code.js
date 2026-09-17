@@ -22,81 +22,40 @@ function normalizeText(text) {
   return String(text || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function normalizeImageUrl(value) {
-  if (!value) return "";
-  try {
-    const u = new URL(String(value), "https://highsto.net");
-    u.hash = "";
-    u.search = "";
-    return decodeURIComponent(u.toString()).replace(/\/$/, "").toLowerCase();
-  } catch {
-    return decodeURIComponent(String(value)).replace(/\/$/, "").toLowerCase();
-  }
-}
-
-function findCountElement(img) {
-  let node = img.closest("a") || img;
-  for (let i = 0; i < 6 && node; i += 1) {
-    const text = normalizeText(node.innerText || node.textContent || "");
-    const match = text.match(/(?:×|x|X)\s*(\d{1,2})\s*$/) || text.match(/(\d{1,2})\s*枚?\s*$/);
-    if (match) {
-      const count = Number(match[1]);
-      if (Number.isInteger(count) && count >= 1 && count <= 4) return { node, count };
-    }
-    node = node.parentElement;
-  }
-  return null;
-}
-
-function extractRowText(node) {
-  return normalizeText(node?.innerText || node?.textContent || "");
-}
-
-function imageFileName(src) {
-  try {
-    const u = new URL(src, "https://highsto.net");
-    return decodeURIComponent(u.pathname.split("/").pop() || "").toLowerCase();
-  } catch {
-    return decodeURIComponent(String(src).split("/").pop() || "").toLowerCase();
-  }
-}
-
 export function parseDeckHtml(html, code = "") {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const rows = [];
-
-  // The official page exposes each deck card as an image. Using the image URL
-  // is much more reliable than parsing visible text: rank-0 cards such as
-  // ハマボウ/シオリン/シュン have multiple variants with the same name.
-  const images = [...doc.querySelectorAll("img")].filter(img => {
-    const src = img.getAttribute("src") || img.getAttribute("data-src") || img.getAttribute("data-original") || "";
-    return /\/assets\/images\/cards\//i.test(src);
+  const candidates = [...doc.querySelectorAll("a")].filter(a => {
+    const href = a.getAttribute("href") || "";
+    const img = a.querySelector("img");
+    const src = img?.getAttribute("src") || "";
+    return /\.(webp|png|jpg|jpeg)(\?|$)/i.test(src) || /card\d+|CRF_|PRM_/i.test(src) || /card/i.test(href);
   });
 
-  for (const img of images) {
-    const src = img.getAttribute("src") || img.getAttribute("data-src") || img.getAttribute("data-original") || "";
-    const countInfo = findCountElement(img);
-    if (!countInfo) continue;
-
-    const imageKey = normalizeImageUrl(src);
-    const alt = normalizeText(img.getAttribute("alt") || "");
-    const text = extractRowText(countInfo.node);
-    const href = img.closest("a")?.getAttribute("href") || "";
-
-    rows.push({
-      name: alt,
-      alias: "",
-      count: countInfo.count,
-      image: src,
-      imageFileName: imageFileName(src),
-      href,
-      text
-    });
+  for (const a of candidates) {
+    const img = a.querySelector("img");
+    const src = img?.getAttribute("src") || "";
+    const parent = a.parentElement;
+    const text = normalizeText(parent?.innerText || a.innerText || "");
+    const alt = normalizeText(img?.getAttribute("alt") || "");
+    const countMatch = text.match(/(?:×|x|X)\s*(\d{1,2})\s*$/) || text.match(/(\d{1,2})\s*枚?\s*$/);
+    if (!countMatch) continue;
+    const count = Number(countMatch[1]);
+    if (!Number.isFinite(count) || count < 1 || count > 4) continue;
+    const lines = [...(parent?.innerText || "").split(/\n+/)].map(normalizeText).filter(Boolean);
+    const nameCandidates = lines.filter(line => !/(?:×|x|X)\s*\d+$/.test(line) && !/^\d+\s*枚?$/.test(line) && line !== "デッキ表示");
+    const name = nameCandidates.at(-1) || alt || "";
+    const alias = nameCandidates.length >= 2 ? nameCandidates.at(-2) : "";
+    rows.push({ name, alias, count, image: src, text });
   }
 
-  return {
-    code,
-    total: rows.reduce((sum, row) => sum + row.count, 0),
-    cards: rows
-  };
+  if (!rows.length) {
+    const bodyText = normalizeText(doc.body?.innerText || "");
+    for (const m of bodyText.matchAll(/([^\n]{1,80}?)\s*(?:×|x|X)\s*(\d{1,2})/g)) {
+      const name = normalizeText(m[1]);
+      const count = Number(m[2]);
+      if (name && count >= 1 && count <= 4) rows.push({ name, alias: "", count, image: "", text: m[0] });
+    }
+  }
+  return { code, total: rows.reduce((sum, row) => sum + row.count, 0), cards: rows };
 }

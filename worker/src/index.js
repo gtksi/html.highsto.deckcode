@@ -31,27 +31,42 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/api/health") return jsonResponse({ ok: true, service: "highsto-deck-api" }, 200, origin);
 
-    const match = url.pathname.match(/^\/api\/deck\/([^/]+)$/);
-    if (!match) return jsonResponse({ error: "Not found" }, 404, origin);
     if (request.method !== "GET") return jsonResponse({ error: "Method not allowed" }, 405, origin);
     if (origin && origin !== ALLOWED_ORIGIN) return jsonResponse({ error: "Origin not allowed" }, 403, origin);
 
-    const code = decodeURIComponent(match[1]);
-    if (!isValidDeckCode(code)) return jsonResponse({ error: "Invalid deck code" }, 400, origin);
+    const deckMatch = url.pathname.match(/^\/api\/deck\/([^/]+)$/);
+    const tournamentMatch = url.pathname.match(/^\/api\/tournament\/(\d+)$/);
 
-    const targetUrl = `https://highsto.net/deck-code/${encodeURIComponent(code)}`;
+    if (!deckMatch && !tournamentMatch) {
+      return jsonResponse({ error: "Not found" }, 404, origin);
+    }
+
+    let targetUrl;
+    let cacheControl = "public, max-age=300";
+
+    if (deckMatch) {
+      const code = decodeURIComponent(deckMatch[1]);
+      if (!isValidDeckCode(code)) return jsonResponse({ error: "Invalid deck code" }, 400, origin);
+      targetUrl = `https://highsto.net/deck-code/${encodeURIComponent(code)}`;
+    } else {
+      const tournamentId = tournamentMatch[1];
+      targetUrl = `https://highsto.net/news/${tournamentId}/`;
+      cacheControl = "public, max-age=300";
+    }
     try {
       const upstream = await fetch(targetUrl, {
         headers: { "User-Agent": "highsto-deck-analyzer/1.0", "Accept": "text/html,application/xhtml+xml" },
       });
-      if (!upstream.ok) return jsonResponse({ error: "Upstream request failed", status: upstream.status, deckCode: code }, 502, origin);
+      if (!upstream.ok) {
+        return jsonResponse({ error: "Upstream request failed", status: upstream.status, targetUrl }, 502, origin);
+      }
       const html = await upstream.text();
       return new Response(html, {
         status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", ...corsHeaders(origin) },
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": cacheControl, ...corsHeaders(origin) },
       });
     } catch (error) {
-      return jsonResponse({ error: "Failed to fetch highsto.net", message: String(error), deckCode: code }, 502, origin);
+      return jsonResponse({ error: "Failed to fetch highsto.net", message: String(error), targetUrl }, 502, origin);
     }
   },
 };

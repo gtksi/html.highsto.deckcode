@@ -15,23 +15,21 @@ function download(text, filename, type) {
 
 export function toCsv(decks) {
   const header = [
-    "deck_code","deck_name","card_name","alias","ability_label","count",
-    "card_key","ability_key","printing_key","match_source",
-    "rank","power","attribute","effect_name_1","effect_content_1",
-    "effect_name_2","effect_content_2","card_id","product_id","pack_id",
-    "card_number","rarity","card_image"
+    "deck_code","deck_name","card_name","alias","count",
+    "card_key","rank","power","attribute","effect_name_1",
+    "effect_content_1","effect_name_2","effect_content_2",
+    "card_id","product_id","pack_id","card_number","rarity"
   ];
   const lines = [header.map(csvEscape).join(",")];
 
   for (const deck of decks) {
     for (const card of deck.cards) {
-      const m = card.master ?? card.masterMatches?.[0] ?? {};
+      const m = card.masterMatches?.[0] ?? {};
       lines.push([
-        deck.code, deck.deckName, card.name, card.alias === "ー" ? "" : card.alias,
-        card.abilityLabel, card.count, card.cardKey, card.abilityKey,
-        card.printingKey, card.matchSource, m.rank, m.power, m.attribute,
+        deck.code, deck.deckName, card.name, card.alias, card.count,
+        card.cardKey, m.rank, m.power, m.attribute,
         m.effectName1, m.effectContent1, m.effectName2, m.effectContent2,
-        m.cardId, m.productId, m.packId, m.cardNumber, m.rarity, m.cardImage
+        m.cardId, m.productId, m.packId, m.cardNumber, m.rarity
       ].map(csvEscape).join(","));
     }
   }
@@ -49,7 +47,7 @@ export function toMarkdown(decks) {
     out.push("| カード | 異名 | 枚数 | Rank | Power | 効果 |");
     out.push("|---|---|---:|---:|---:|---|");
     for (const card of deck.cards) {
-      const m = card.master ?? card.masterMatches?.[0] ?? {};
+      const m = card.masterMatches?.[0] ?? {};
       const effects = [
         m.effectName1 && `${m.effectName1}: ${m.effectContent1 ?? ""}`,
         m.effectName2 && `${m.effectName2}: ${m.effectContent2 ?? ""}`
