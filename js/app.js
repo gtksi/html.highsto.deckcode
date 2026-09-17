@@ -45,14 +45,14 @@ function render() {
     const table = document.createElement("table");
     table.innerHTML = `
       <thead><tr>
-        <th>カード</th><th>異名</th><th>枚数</th>
+        <th>カード</th><th>異名</th><th>識別（能力）</th><th>枚数</th>
         <th>Rank</th><th>Power</th><th>効果</th>
       </tr></thead>
     `;
     const tbody = document.createElement("tbody");
 
     for (const card of deck.cards) {
-      const m = card.masterMatches?.[0] ?? {};
+      const m = card.master ?? card.masterMatches?.[0] ?? {};
       const tr = document.createElement("tr");
       const effects = [
         m.effectName1 && `${m.effectName1}: ${m.effectContent1 ?? ""}`,
@@ -61,7 +61,8 @@ function render() {
 
       tr.innerHTML = `
         <td>${escapeHtml(card.name)}</td>
-        <td>${escapeHtml(card.alias || "")}</td>
+        <td>${escapeHtml(card.alias === "ー" ? "" : (card.alias || ""))}</td>
+        <td>${escapeHtml(card.abilityLabel || card.name)}</td>
         <td>${card.count}</td>
         <td>${m.rank ?? ""}</td>
         <td>${m.power ?? ""}</td>
@@ -103,8 +104,12 @@ async function loadCodes(codes) {
   render();
 
   if (decks.length) {
+    const unresolved = decks.flatMap(d => d.cards).filter(c => !c.master);
     status.textContent += `\n取得済み：${decks.length}デッキ`;
-    status.className = "status success";
+    if (unresolved.length) {
+      status.textContent += `\nカードマスター未照合：${unresolved.length}件`;
+    }
+    status.className = unresolved.length ? "status" : "status success";
   }
 }
 

@@ -65,3 +65,18 @@ The Worker workflow deploys when `worker/` changes or when manually dispatched.
 
 The Worker exposes `GET /api/health` and `GET /api/deck/<deck-code>`. Its browser CORS origin is currently restricted to `https://gtksi.github.io`; change `ALLOWED_ORIGIN` in `worker/src/index.js` if the Pages URL changes.
 
+
+## カード同定ルール
+
+デッキページのカード画像URLをカードマスターの `cardImage` と照合して、まず収録カードを特定します。カード名だけではなく、`productId` / `packId` / `card_name` / `alias` / 効果名を保持します。
+
+- ユーザー向けの能力識別: `カード名（効果名1／効果名2）`
+- 効果分析用キー: `card_name + alias + effectName1 + effectName2`
+- 収録識別用キー: `productId + packId + card_name + alias`
+- `cardId` はマスター上の個別印刷IDとして保持
+
+これにより、同名のハマボウ・シオリン・シュンでも、例えば「ライトコード／身代わり」のような能力で区別できます。カードマスターでは実際に同名カードに複数の効果構成・収録が存在します。
+
+## Workerのデプロイ
+
+GitHub Actions は Node.js 24 上で `npm install` → `npx wrangler deploy` を実行します。`CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` は GitHub Actions の Repository Secrets に登録してください。
