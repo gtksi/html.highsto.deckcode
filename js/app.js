@@ -60,8 +60,8 @@ function render() {
       ].filter(Boolean).join("\n");
 
       tr.innerHTML = `
-        <td>${escapeHtml(card.name)}</td>
-        <td>${escapeHtml(card.alias || "")}</td>
+        <td>${escapeHtml(card.resolvedName || card.name)}</td>
+        <td>${escapeHtml(card.resolvedAlias || "")}</td>
         <td>${card.count}</td>
         <td>${m.rank ?? ""}</td>
         <td>${m.power ?? ""}</td>

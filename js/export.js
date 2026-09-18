@@ -26,8 +26,9 @@ export function toCsv(decks) {
     for (const card of deck.cards) {
       const m = card.masterMatches?.[0] ?? {};
       lines.push([
-        deck.code, deck.deckName, card.name, card.alias, card.count,
-        card.cardKey, m.rank, m.power, m.attribute,
+        deck.code, deck.deckName, card.resolvedName || m.name || card.name,
+        card.resolvedAlias || (m.alias && m.alias !== "ー" ? m.alias : card.alias) || "",
+        card.count, card.cardKey, m.rank, m.power, m.attribute,
         m.effectName1, m.effectContent1, m.effectName2, m.effectContent2,
         m.cardId, m.productId, m.packId, m.cardNumber, m.rarity
       ].map(csvEscape).join(","));
@@ -52,7 +53,7 @@ export function toMarkdown(decks) {
         m.effectName1 && `${m.effectName1}: ${m.effectContent1 ?? ""}`,
         m.effectName2 && `${m.effectName2}: ${m.effectContent2 ?? ""}`
       ].filter(Boolean).join("<br>");
-      out.push(`| ${card.name} | ${card.alias || ""} | ${card.count} | ${m.rank ?? ""} | ${m.power ?? ""} | ${effects} |`);
+      out.push(`| ${card.resolvedName || m.name || card.name} | ${card.resolvedAlias || (m.alias && m.alias !== "ー" ? m.alias : card.alias) || ""} | ${card.count} | ${m.rank ?? ""} | ${m.power ?? ""} | ${effects} |`);
     }
     out.push("");
   }

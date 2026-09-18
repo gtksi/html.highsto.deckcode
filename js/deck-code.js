@@ -104,6 +104,12 @@ function extractCard(img, container) {
     alias = lines.length >= 2 ? lines.at(-2) : "";
   }
 
+  // The final card on some pages is followed by utility buttons in the same
+  // text container. Remove those known UI suffixes before card matching.
+  name = name
+    .replace(/\s*(?:デッキ画像を生成|A4印刷用出力|PNG出力|PDF出力|Twitter|Amazon|Copyright|Highsto).*$/i, "")
+    .trim();
+
   if (!name || isUiText(name)) return null;
 
   return {
